@@ -1,0 +1,9 @@
+{
+  "name": "tizen-clean-home",
+  "version": "1.0.0",
+  "description": "Minimalist ad-free home screen for Samsung Tizen TVs, loaded through TizenBrew",
+  "packageType": "app",
+  "appName": "Clean Home",
+  "appPath": "app/index.html",
+  "keys": []
+}
