@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Clean Home</title>
+<style>
+  * { box-sizing: border-box; user-select: none; }
+  html, body {
+    margin: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: #05070d;
+    font-family: "SamsungOne", "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #f4f6fb;
+  }
+
+  /* Ambient animated aurora background */
+  .blob { position: absolute; border-radius: 50%; filter: blur(140px); opacity: 0.55; transition: background 1.2s ease; }
+  .b1 { width: 920px; height: 920px; background: #263899; left: -200px; top: -260px; animation: drift1 55s ease-in-out infinite alternate; }
+  .b2 { width: 820px; height: 820px; background: #682570; right: -180px; bottom: -280px; animation: drift2 70s ease-in-out infinite alternate; }
+  .b3 { width: 640px; height: 640px; background: #105e6e; left: 42%; top: 38%; animation: drift3 85s ease-in-out infinite alternate; }
+  @keyframes drift1 { to { transform: translate(480px, 280px); } }
+  @keyframes drift2 { to { transform: translate(-560px, -220px); } }
+  @keyframes drift3 { to { transform: translate(-380px, -320px); } }
+
+  body.theme-oled .blob { opacity: 0; }
+  body.theme-sunset .b1 { background: #8f2b3a; }
+  body.theme-sunset .b2 { background: #8a4f1d; }
+  body.theme-sunset .b3 { background: #521945; }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 40px;
+  }
+
+  #time {
+    font-size: 210px;
+    font-weight: 200;
+    letter-spacing: -5px;
+    line-height: 1;
+    text-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  #date {
+    font-size: 42px;
+    font-weight: 300;
+    opacity: 0.72;
+    margin-top: 18px;
+    letter-spacing: 0.5px;
+  }
+
+  .tiles {
+    display: flex;
+    gap: 54px;
+    margin-top: 110px;
+  }
+
+  .tile {
+    width: 390px;
+    height: 215px;
+    border-radius: 32px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 3px solid rgba(255, 255, 255, 0.10);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+                background 0.18s ease,
+                border-color 0.18s ease,
+                box-shadow 0.18s ease;
+  }
+
+  .tile-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: 700;
+  }
+
+  .tile-title {
+    font-size: 38px;
+    font-weight: 500;
+    letter-spacing: -0.3px;
+  }
+
+  .tile-sub {
+    font-size: 22px;
+    opacity: 0.58;
+    font-weight: 400;
+  }
+
+  .tile.focus {
+    transform: scale(1.08) translateY(-6px);
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.90);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  }
+
+  .footer-bar {
+    position: absolute;
+    bottom: 48px;
+    display: flex;
+    gap: 36px;
+    font-size: 24px;
+    opacity: 0.45;
+  }
+
+  #hint {
+    position: absolute;
+    bottom: 115px;
+    font-size: 28px;
+    padding: 14px 32px;
+    border-radius: 999px;
+    background: rgba(15, 20, 35, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+  #hint.show { opacity: 0.95; }
+</style>
+</head>
+<body>
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+
+  <div class="wrap">
+    <div id="time">--:--</div>
+    <div id="date"></div>
+    <div class="tiles" id="tiles"></div>
+    <div id="hint"></div>
+    <div class="footer-bar">
+      <span>◀ ▶ Navigate</span>
+      <span>● Select</span>
+      <span>▲ ▼ Ambient Theme</span>
+    </div>
+  </div>
+
+<script>
+  var APPS = [
+    {
+      name: "TizenTube",
+      sub: "Ad-Free YouTube",
+      icon: "▶",
+      color: "linear-gradient(135deg, #ff2a2a, #b30000)",
+      type: "tizenbrew",
+      moduleName: "npm/@foxreis/tizentube"
+    },
+    {
+      name: "Plex",
+      sub: "Movies & Media",
+      icon: "P",
+      color: "linear-gradient(135deg, #e5a00d, #b87700)",
+      type: "tizen",
+      id: "3201512006963",
+      tizenId: "kIciSQlYEM.plex"
+    }
+  ];
+
+  var THEMES = ["", "theme-sunset", "theme-oled"];
+  var themeIdx = 0;
+  var tilesEl = document.getElementById("tiles");
+  var hintEl = document.getElementById("hint");
+  var focusIdx = 0;
+
+  APPS.forEach(function (app) {
+    var t = document.createElement("div");
+    t.className = "tile";
+    t.innerHTML =
+      '<div class="tile-icon" style="background:' + app.color + '">' + app.icon + '</div>' +
+      '<div class="tile-title">' + app.name + '</div>' +
+      '<div class="tile-sub">' + app.sub + '</div>';
+    tilesEl.appendChild(t);
+  });
+  var tiles = tilesEl.children;
+
+  function render() {
+    for (var i = 0; i < tiles.length; i++) {
+      tiles[i].className = "tile" + (i === focusIdx ? " focus" : "");
+    }
+  }
+
+  function hint(msg) {
+    hintEl.textContent = msg;
+    hintEl.className = "show";
+    clearTimeout(hint._t);
+    hint._t = setTimeout(function () { hintEl.className = ""; }, 4000);
+  }
+
+  function launchTizen(app) {
+    hint("Launching " + app.name + "...");
+    try {
+      if (typeof tizen !== "undefined" && tizen.application) {
+        tizen.application.launch(
+          app.tizenId || app.id,
+          function () {},
+          function () { launchViaRest(app.id); }
+        );
+        return;
+      }
+    } catch (e) {}
+    launchViaRest(app.id);
+  }
+
+  function launchViaRest(id) {
+    var x = new XMLHttpRequest();
+    x.open("POST", "http://127.0.0.1:8001/api/v2/applications/" + id);
+    x.onerror = function () { hint("Could not launch app " + id); };
+    x.send();
+  }
+
+  function launchTizenBrewModule(targetModule) {
+    // If running as standalone app (not inside TizenBrew), launch TizenBrewNextGeneration directly into TizenTube via AppControl!
+    try {
+      if (typeof tizen !== "undefined" && tizen.application && tizen.ApplicationControl) {
+        var curId = tizen.application.getCurrentApplication().appInfo.id;
+        if (curId !== "xvvl3S1bvH.TizenBrewStandalone") {
+          hint("Opening TizenTube...");
+          var payload = JSON.stringify({
+            moduleType: "npm",
+            moduleName: "@foxreis/tizentube",
+            args: ""
+          });
+          var appCtrl = new tizen.ApplicationControl(
+            "http://tizen.org/appcontrol/operation/default",
+            null, null, null,
+            [new tizen.ApplicationControlData("data", [payload])]
+          );
+          tizen.application.launchAppControl(
+            appCtrl,
+            "xvvl3S1bvH.TizenBrewStandalone",
+            function () {},
+            function () {
+              tizen.application.launch("xvvl3S1bvH.TizenBrewStandalone");
+            }
+          );
+          return;
+        }
+      }
+    } catch (e) {}
+    hint("Launching TizenTube...");
+    try {
+      var ws = new WebSocket("ws://localhost:8081");
+      var fallbackTimer = setTimeout(function () {
+        location.href = "https://www.youtube.com/tv";
+      }, 2500);
+
+      ws.onopen = function () {
+        ws.send(JSON.stringify({ type: 4, payload: false })); // Events.GetModules
+      };
+
+      ws.onmessage = function (e) {
+        try {
+          var msg = JSON.parse(e.data);
+          if (msg.type === 4 && Array.isArray(msg.payload)) {
+            var mdl = msg.payload.find(function (m) {
+              return m.fullName === targetModule || (m.fullName && m.fullName.toLowerCase().indexOf("tizentube") !== -1);
+            });
+            if (mdl) {
+              clearTimeout(fallbackTimer);
+              if (Array.isArray(mdl.keys)) {
+                mdl.keys.forEach(function (k) {
+                  try { tizen.tvinputdevice.registerKey(k); } catch (err) {}
+                });
+              }
+              ws.send(JSON.stringify({ type: 5, payload: mdl })); // Events.LaunchModule
+              if (!mdl.evaluateScriptOnDocumentStart && mdl.appPath) {
+                location.href = mdl.appPath;
+              }
+            }
+          }
+        } catch (err) {}
+      };
+
+      ws.onerror = function () {
+        clearTimeout(fallbackTimer);
+        hint("Set Developer IP back to 127.0.0.1 so TizenBrew Service can launch TizenTube");
+      };
+    } catch (e) {
+      hint("TizenBrew service unavailable");
+    }
+  }
+
+  function activate() {
+    var app = APPS[focusIdx];
+    if (app.type === "tizen") launchTizen(app);
+    else launchTizenBrewModule(app.moduleName);
+  }
+
+  document.addEventListener("keydown", function (e) {
+    switch (e.keyCode) {
+      case 37: // Left
+        focusIdx = (focusIdx - 1 + tiles.length) % tiles.length;
+        render();
+        break;
+      case 39: // Right
+        focusIdx = (focusIdx + 1) % tiles.length;
+        render();
+        break;
+      case 38: // Up - cycle ambient theme
+      case 40: // Down - cycle ambient theme
+        themeIdx = (themeIdx + 1) % THEMES.length;
+        document.body.className = THEMES[themeIdx];
+        hint(THEMES[themeIdx] === "theme-oled" ? "Theme: Pure OLED Black" : THEMES[themeIdx] === "theme-sunset" ? "Theme: Warm Sunset" : "Theme: Aurora Night");
+        break;
+      case 13: // Enter / OK
+        activate();
+        break;
+    }
+  });
+
+  function tick() {
+    var d = new Date();
+    var h = d.getHours() % 12 || 12;
+    var m = ("0" + d.getMinutes()).slice(-2);
+    document.getElementById("time").textContent = h + ":" + m;
+    document.getElementById("date").textContent = d.toLocaleDateString(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric"
+    });
+  }
+
+  render();
+  tick();
+  setInterval(tick, 1000);
+</script>
+</body>
+</html>
